@@ -11,12 +11,19 @@ type MessagePayload = record {
   title : text;
   body : text;
 };
+type Story = record {
+  id : text;
+  title : text;
+  messages : vec Message;
+  createdAt : nat64;
+  updatedAt : opt nat64;
+};
 type _AzleResult = variant { Ok : Message; Err : text };
-type _AzleResult_1 = variant { Ok : vec Message; Err : text };
+type _AzleResult_1 = variant { Ok : Story; Err : text };
+type _AzleResult_2 = variant { Ok : vec Story; Err : text };
 service : () -> {
-  addMessage : (MessagePayload) -> (_AzleResult);
-  deleteMessage : (text) -> (_AzleResult);
-  getMessage : (text) -> (_AzleResult) query;
-  getMessages : () -> (_AzleResult_1) query;
-  updateMessage : (text, MessagePayload) -> (_AzleResult);
+  addMessageToStory : (text, MessagePayload) -> (_AzleResult);
+  createStory : (text) -> (_AzleResult_1);
+  getStories : () -> (_AzleResult_2) query;
+  getStory : (text) -> (_AzleResult_1) query;
 }

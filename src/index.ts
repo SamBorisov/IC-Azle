@@ -1,6 +1,7 @@
 import { $query, $update, Record, StableBTreeMap, Vec, match, Result, nat64, ic, Opt } from 'azle';
 import { v4 as uuidv4 } from 'uuid';
 
+
 type Message = Record<{
     id: string;
     title: string;
@@ -16,45 +17,61 @@ type MessagePayload = Record<{
     attachmentURL: string;
 }>
 
-const messageStorage = new StableBTreeMap<string, Message>(0, 44, 1024);
+type Story = Record<{
+    id: string;
+    title: string;
+    messages: Vec<Message>;
+    createdAt: nat64;
+    updatedAt: Opt<nat64>;
+}>
 
-$query;
-export function getMessages(): Result<Vec<Message>, string> {
-    return Result.Ok(messageStorage.values());
+type StoryPayload = Record<{
+    title: string;
+}>
+
+const storyStorage = new StableBTreeMap<string, Story>(0, 44, 1024);
+
+$update;
+export function createStory(title: string): Result<Story, string> {
+    const story: Story = {
+        id: uuidv4(),
+        title,
+        messages: [] as Vec<Message>,
+        createdAt: ic.time(),
+        updatedAt: Opt.None,
+    };
+    storyStorage.insert(story.id, story);
+    return Result.Ok(story);
 }
 
 $query;
-export function getMessage(id: string): Result<Message, string> {
-    return match(messageStorage.get(id), {
-        Some: (message) => Result.Ok<Message, string>(message),
-        None: () => Result.Err<Message, string>(`a message with id=${id} not found`)
+export function getStories(): Result<Vec<Story>, string> {
+    return Result.Ok(storyStorage.values());
+}
+
+$query;
+export function getStory(id: string): Result<Story, string> {
+    return match(storyStorage.get(id), {
+        Some: (story) => Result.Ok<Story, string>(story),
+        None: () => Result.Err<Story, string>(`A story with id=${id} not found`)
     });
 }
 
 $update;
-export function addMessage(payload: MessagePayload): Result<Message, string> {
-    const message: Message = { id: uuidv4(), createdAt: ic.time(), updatedAt: Opt.None, ...payload };
-    messageStorage.insert(message.id, message);
-    return Result.Ok(message);
-}
-
-$update;
-export function updateMessage(id: string, payload: MessagePayload): Result<Message, string> {
-    return match(messageStorage.get(id), {
-        Some: (message) => {
-            const updatedMessage: Message = {...message, ...payload, updatedAt: Opt.Some(ic.time())};
-            messageStorage.insert(message.id, updatedMessage);
-            return Result.Ok<Message, string>(updatedMessage);
+export function addMessageToStory(storyId: string, payload: MessagePayload): Result<Message, string> {
+    return match(storyStorage.get(storyId), {
+        Some: (story) => {
+            const message: Message = {
+                id: uuidv4(),
+                ...payload,
+                createdAt: ic.time(),
+                updatedAt: Opt.None,
+            };
+            story.messages.push(message);
+            storyStorage.insert(story.id, story);
+            return Result.Ok<Message, string>(message);
         },
-        None: () => Result.Err<Message, string>(`couldn't update a message with id=${id}. message not found`)
-    });
-}
-
-$update;
-export function deleteMessage(id: string): Result<Message, string> {
-    return match(messageStorage.remove(id), {
-        Some: (deletedMessage) => Result.Ok<Message, string>(deletedMessage),
-        None: () => Result.Err<Message, string>(`couldn't delete a message with id=${id}. message not found.`)
+        None: () => Result.Err<Message, string>(`Couldn't add a message to the story with id=${storyId}. Story not found`)
     });
 }
 
