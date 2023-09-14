@@ -1,7 +1,9 @@
 import { $query, $update, Record, StableBTreeMap, Vec, match, Result, nat64, ic, Opt } from 'azle';
 import { v4 as uuidv4 } from 'uuid';
 
-
+/**
+ * Represents a message in the system.
+ */
 type Message = Record<{
     id: string;
     title: string;
@@ -11,12 +13,19 @@ type Message = Record<{
     updatedAt: Opt<nat64>;
 }>
 
+/**
+ * Represents the payload for creating a new message.
+ */
 type MessagePayload = Record<{
     title: string;
     body: string;
     attachmentURL: string;
 }>
 
+
+/**
+ * Represents a story in the system.
+ */
 type Story = Record<{
     id: string;
     title: string;
@@ -25,14 +34,30 @@ type Story = Record<{
     updatedAt: Opt<nat64>;
 }>
 
+/**
+ * Represents the payload for creating a new story.
+ */
 type StoryPayload = Record<{
     title: string;
 }>
 
 const storyStorage = new StableBTreeMap<string, Story>(0, 44, 1024);
 
+
+/**
+ * Creates a new story with the provided title.
+ * @param title The title of the story.
+ * @returns Result containing the created story or an error message.
+ */
 $update;
 export function createStory(title: string): Result<Story, string> {
+    if (!title || title.trim() === '') {
+        return Result.Err('Error: Title is required.');
+    }
+
+    if (title.length > 255) {
+        return Result.Err('Error: Title is too long (maximum 255 characters).');
+    }
     const story: Story = {
         id: uuidv4(),
         title,
@@ -44,35 +69,66 @@ export function createStory(title: string): Result<Story, string> {
     return Result.Ok(story);
 }
 
+
+/**
+ * Retrieves all stories.
+ * @returns Result containing a vector of stories or an error message.
+ */
 $query;
 export function getStories(): Result<Vec<Story>, string> {
     return Result.Ok(storyStorage.values());
 }
 
-$query;
+/**
+ * Retrieves a story by ID.
+ * @param id The ID of the story to retrieve.
+ * @returns Result containing the story or an error message if not found.
+ */
 export function getStory(id: string): Result<Story, string> {
-    return match(storyStorage.get(id), {
-        Some: (story) => Result.Ok<Story, string>(story),
-        None: () => Result.Err<Story, string>(`A story with id=${id} not found`)
-    });
+    const story = storyStorage.get(id);
+    if (story) {
+        return Result.Ok(story);
+    } else {
+        return Result.Err(`Error: A story with id=${id} not found.`);
+    }
 }
 
-$update;
+/**
+ * Adds a message to a story.
+ * @param storyId The ID of the story.
+ * @param payload The message payload.
+ * @returns Result containing the added message or an error message.
+ */
 export function addMessageToStory(storyId: string, payload: MessagePayload): Result<Message, string> {
-    return match(storyStorage.get(storyId), {
-        Some: (story) => {
-            const message: Message = {
-                id: uuidv4(),
-                ...payload,
-                createdAt: ic.time(),
-                updatedAt: Opt.None,
-            };
-            story.messages.push(message);
-            storyStorage.insert(story.id, story);
-            return Result.Ok<Message, string>(message);
-        },
-        None: () => Result.Err<Message, string>(`Couldn't add a message to the story with id=${storyId}. Story not found`)
-    });
+    const existingStory = storyStorage.get(storyId);
+
+    if (!existingStory) {
+        return Result.Err(`Error: Couldn't add a message to the story with id=${storyId}. Story not found.`);
+    }
+
+    // Validate the message payload.
+    if (!payload.title || payload.title.trim() === '') {
+        return Result.Err('Error: Message title is required.');
+    }
+
+    if (!payload.body || payload.body.trim() === '') {
+        return Result.Err('Error: Message body is required.');
+    }
+
+    if (!payload.attachmentURL || payload.attachmentURL.trim() === '') {
+        return Result.Err('Error: Message attachmentURL is required.');
+    }
+
+    const message: Message = {
+        id: uuidv4(),
+        ...payload,
+        createdAt: ic.time(),
+        updatedAt: Opt.None,
+    };
+
+    existingStory.messages.push(message);
+    storyStorage.insert(existingStory.id, existingStory);
+    return Result.Ok(message);
 }
 
 // a workaround to make uuid package work with Azle
